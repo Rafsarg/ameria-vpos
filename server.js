@@ -7,18 +7,19 @@ require('dotenv').config();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
-// ✅ GET для проверки Tilda
+// ✅ GET для проверки от Tilda
 app.get('/create-payment', (req, res) => {
   res.send('✅ Webhook is alive');
 });
 
-// 🔐 POST: создаёт платёж и редиректит пользователя
+// 🔐 POST-запрос: создание платежа
 app.post('/create-payment', async (req, res) => {
   try {
     console.log('📥 Incoming data:', req.body);
 
     const { name, email, amount } = req.body;
 
+    // 💳 Проверка для тестового режима
     if (amount !== '10') {
       return res.status(400).json({
         error: true,
@@ -26,10 +27,10 @@ app.post('/create-payment', async (req, res) => {
       });
     }
 
-    // Уникальный ID транзакции (можно заменить на uuid или timestamp)
+    // 🆔 Уникальный идентификатор заказа
     const orderId = `ORDER-${Date.now()}`;
 
-    // Обращение к API Ameriabank InitPayment
+    // 📡 Запрос к API Ameriabank InitPayment
     const response = await axios.post('https://vpos.ameriabank.am/WebPOS/InitPayment', {
       ClientID: process.env.CLIENT_ID,
       Username: process.env.USERNAME,
@@ -49,7 +50,7 @@ app.post('/create-payment', async (req, res) => {
       });
     }
 
-    // ✅ Успех — редиректим пользователя на страницу оплаты
+    // ✅ Успешный запрос — редирект на платёжную страницу
     return res.redirect(PaymentURL);
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
@@ -60,8 +61,8 @@ app.post('/create-payment', async (req, res) => {
   }
 });
 
-// Запуск сервера
+// 🚀 Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
