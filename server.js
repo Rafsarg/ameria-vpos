@@ -10,6 +10,8 @@ app.use(express.json());
 
 app.post('/create-payment', async (req, res) => {
   try {
+    console.log('📥 Incoming data:', req.body); // <--- ЭТО ДОБАВЛЯЕМ
+
     const { name, email, amount } = req.body;
 
     if (amount !== '10') {
