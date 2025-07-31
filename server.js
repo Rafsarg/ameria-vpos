@@ -1,48 +1,70 @@
 const express = require('express');
 const axios = require('axios');
-require('dotenv').config();
-
+const qs = require('qs');
 const app = express();
-app.use(express.json());
+const port = process.env.PORT || 8080;
+
+// 👉 Нужно, чтобы принимать формы от Tilda
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 app.post('/create-payment', async (req, res) => {
-  const { name, email, amount } = req.body;
-  const orderID = Math.floor(Date.now() / 1000);
-
-  const payload = {
-    ClientID: process.env.AMERIA_CLIENT_ID,
-    Username: process.env.AMERIA_USERNAME,
-    Password: process.env.AMERIA_PASSWORD,
-    OrderID: orderID,
-    Amount: parseFloat(amount),
-    Currency: "051",
-    Description: `Ticket for ${name} (${email})`,
-    BackURL: process.env.RETURN_URL,
-    Timeout: 600
-  };
-
   try {
+    const { name, email, amount } = req.body;
+
+    if (amount !== '10') {
+      return res.status(400).json({
+        error: true,
+        message: 'In test mode amount must be 10 AMD',
+      });
+    }
+
+    const clientId = process.env.AMERIA_CLIENT_ID || 'YourClientID';
+    const returnUrl = process.env.RETURN_URL || 'https://yourdomain.com/thanks';
+
+    const paymentData = {
+      ClientID: clientId,
+      Amount: amount,
+      Username: name || 'Test User',
+      Email: email || '',
+      OrderID: 'ORDER-' + Date.now(),
+      BackURL: returnUrl,
+    };
+
+    // Запрос к Ameriabank VPOS InitPayment
     const response = await axios.post(
-      'https://servicestest.ameriabank.am/VPOS/api/VPOS/InitPayment',
-      payload,
-      { headers: { 'Content-Type': 'application/json' } }
+      'https://testpayments.ameriabank.am/VPOS/api/InitPayment',
+      paymentData,
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
     );
 
-    const { PaymentID, ResponseCode, ResponseMessage } = response.data;
+    const { ResponseCode, Description, PaymentID, FormUrl } = response.data;
 
-    if (ResponseCode == 1) {
-      const payURL = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${PaymentID}&lang=en`;
-      return res.redirect(payURL);
+    if (ResponseCode === '00' && FormUrl) {
+      return res.redirect(FormUrl); // ✅ Перенаправляем клиента на Ameriabank
     } else {
-      return res.status(400).json({ error: true, message: ResponseMessage });
+      return res.status(400).json({
+        error: true,
+        message: Description || 'Payment initiation failed',
+      });
     }
   } catch (error) {
-    return res.status(500).json({ error: true, message: error.message });
+    console.error('Payment error:', error?.response?.data || error.message);
+    return res.status(500).json({
+      error: true,
+      message: 'Server error during payment creation',
+    });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+app.get('/', (req, res) => {
+  res.send('✅ Ameria VPOS server is running.');
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
