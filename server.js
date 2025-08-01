@@ -1,73 +1,75 @@
 const express = require('express');
 const axios = require('axios');
-const bodyParser = require('body-parser');
+const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
 
-app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+// Middleware
+app.use(cors()); // Разрешаем запросы от Tilda
+app.use(express.urlencoded({ extended: true })); // Для данных от Tilda
+app.use(express.json()); // На случай JSON
 
-// ✅ GET-проверка для Tilda Webhook
-app.get('/create-payment', (req, res) => {
-  res.send('✅ Webhook is alive');
+// Логирование всех запросов
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.url}`);
+  next();
 });
 
-// 🔐 POST — создание платежа
+// ✅ Проверка работы
+app.get('/create-payment', (req, res) => {
+  res.send('✅ Сервер работает');
+});
+
+// 🔄 Основной обработчик
 app.post('/create-payment', async (req, res) => {
   try {
-    console.log('📥 Incoming data:', req.body);
+    console.log('📩 Данные от Tilda:', req.body);
 
+    // Проверка данных
     const { name, email, amount } = req.body;
-
-    if (parseInt(amount) !== 10) {
-      return res.status(400).json({
-        error: true,
-        message: 'In test mode amount must be 10 AMD',
-      });
+    if (!name || !email || !amount) {
+      throw new Error('Не хватает name, email или amount');
     }
 
-    const orderId = `ORDER-${Date.now()}`;
+    // Фиксированная сумма для теста
+    if (Number(amount) !== 10) {
+      return res.status(400).json({ error: 'В тестовом режиме сумма должна быть 10 AMD' });
+    }
 
-    const response = await axios.post('https://vpos.ameriabank.am/WebPOS/InitPayment', {
-      ClientID: process.env.AMERIA_CLIENT_ID,
-      Username: process.env.AMERIA_USERNAME,
-      Password: process.env.AMERIA_PASSWORD,
-      Amount: amount,
-      OrderID: orderId,
-      BackURL: process.env.RETURN_URL,
-      Description: `Ticket from ${name}`,
+    // Запрос в Ameriabank
+    const response = await axios.post(
+      'https://vpos.ameriabank.am/WebPOS/InitPayment',
+      {
+        ClientID: process.env.AMERIA_CLIENT_ID,
+        Username: process.env.AMERIA_USERNAME,
+        Password: process.env.AMERIA_PASSWORD,
+        Amount: amount,
+        OrderID: `ORDER-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        BackURL: process.env.RETURN_URL,
+        Description: `Платеж от ${name} (${email})`,
+      },
+      { timeout: 10000 } // Таймаут 10 секунд
+    );
+
+    console.log('🔑 Ответ от Ameriabank:', response.data);
+
+    // Проверка ответа банка
+    if (response.data.ResponseCode !== '00' || !response.data.PaymentURL) {
+      throw new Error('Ошибка Ameriabank: ' + JSON.stringify(response.data));
+    }
+
+    // Успешный ответ
+    res.json({
+      success: true,
+      paymentUrl: response.data.PaymentURL
     });
 
-    const { ResponseCode, PaymentURL } = response.data;
-
-    if (ResponseCode !== '00') {
-      return res.status(500).json({
-        error: true,
-        message: 'Ошибка от Ameriabank: ' + JSON.stringify(response.data),
-      });
-    }
-
-    // ✅ HTML-редирект через форму (обход Tilda)
-    return res.send(`
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Redirecting...</title>
-        </head>
-        <body>
-          <form id="payform" method="POST" action="${PaymentURL}">
-            <noscript><input type="submit" value="Continue"></noscript>
-          </form>
-          <script>document.getElementById("payform").submit();</script>
-        </body>
-      </html>
-    `);
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
-    return res.status(500).json({
+    res.status(500).json({
       error: true,
-      message: 'Ошибка при инициализации платежа',
+      message: error.message || 'Ошибка сервера'
     });
   }
 });
@@ -75,5 +77,5 @@ app.post('/create-payment', async (req, res) => {
 // Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Сервер запущен на порту ${PORT}`);
 });
