@@ -6,55 +6,117 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+// Счетчик для тестового OrderID (диапазон 2350301–2350400)
+let testOrderId = 2350301;
+
 app.get('/create-payment', (req, res) => {
   res.send('✅ Webhook is alive');
 });
 
 app.post('/create-payment', async (req, res) => {
-  console.log('📥 Incoming data:', req.body);
+  console.log('📥 Данные от Tilda:', req.body);
   const { name, email, amount } = req.body;
 
+  // Проверка суммы для тестового режима
   if (parseInt(amount) !== 10) {
     return res.status(400).json({
       error: true,
-      message: 'In test mode amount must be 10 AMD',
+      message: 'В тестовом режиме сумма должна быть 10 AMD',
     });
   }
 
-  const orderId = `ORDER-${Date.now()}`;
+  // Генерация уникального OrderID
+  const orderId = testOrderId++;
+  if (orderId > 2350400) {
+    testOrderId = 2350301; // Сброс при превышении диапазона
+  }
+
   const payload = {
     ClientID: process.env.AMERIA_CLIENT_ID,
     Username: process.env.AMERIA_USERNAME,
     Password: process.env.AMERIA_PASSWORD,
-    Amount: amount,
+    Amount: parseFloat(amount),
     OrderID: orderId,
-    BackURL: process.env.RETURN_URL,
+    BackURL: process.env.RETURN_URL, // Например, https://ameria-vpos.fly.dev/payment-callback
     Description: `Оплата билета от ${name}`,
+    Currency: '051', // AMD
+    Timeout: 1200, // 20 минут
+    Opaque: email || '', // Передаем email для возврата
   };
 
   try {
-    const apiRes = await axios.post('https://servicestest.ameriabank.am/VPOS/api/VPOS/InitPayment', payload, {
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const { ResponseCode, PaymentURL } = apiRes.data;
+    const apiRes = await axios.post(
+      'https://servicestest.ameriabank.am/VPOS/api/VPOS/InitPayment',
+      payload,
+      { headers: { 'Content-Type': 'application/json' } }
+    );
 
-    if (ResponseCode !== '00' || !PaymentURL) {
+    const { PaymentID, ResponseCode, ResponseMessage } = apiRes.data;
+
+    // Проверка успешного ответа (ResponseCode = 1 для InitPayment)
+    if (ResponseCode !== 1) {
+      console.error('❌ Ошибка AmeriaBank:', ResponseMessage);
       return res.status(500).json({
         error: true,
-        message: 'Ошибка от Ameriabank: ' + JSON.stringify(apiRes.data),
+        message: `Ошибка от AmeriaBank: ${ResponseMessage} (Код: ${ResponseCode})`,
       });
     }
 
+    // Формирование URL для перенаправления
+    const paymentUrl = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${PaymentID}&lang=en`;
+
     return res.json({
       success: true,
-      redirectUrl: PaymentURL,
+      redirectUrl: paymentUrl,
     });
   } catch (err) {
     console.error('❌ Ошибка сервера:', err.message);
     return res.status(500).json({
       error: true,
-      message: 'Ошибка при инициализации платежа'
+      message: `Ошибка при инициализации платежа: ${err.message}`,
     });
+  }
+});
+
+// Обработка обратного вызова от AmeriaBank
+app.get('/payment-callback', async (req, res) => {
+  const { orderID, responseCode, paymentID, opaque } = req.query;
+  console.log('📥 Обратный вызов от AmeriaBank:', req.query);
+
+  if (responseCode !== '00') {
+    return res.redirect(
+      `${process.env.TILDA_FAIL_URL}?error=Платеж не выполнен&orderID=${orderID}`
+    );
+  }
+
+  // Проверка статуса платежа через GetPaymentDetails
+  try {
+    const paymentDetailsRes = await axios.post(
+      'https://servicestest.ameriabank.am/VPOS/api/VPOS/GetPaymentDetails',
+      {
+        PaymentID: paymentID,
+        Username: process.env.AMERIA_USERNAME,
+        Password: process.env.AMERIA_PASSWORD,
+      },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+
+    const { ResponseCode, PaymentState, Amount, CardNumber, ClientEmail } = paymentDetailsRes.data;
+
+    if (ResponseCode !== '00') {
+      return res.redirect(
+        `${process.env.TILDA_FAIL_URL}?error=Ошибка проверки платежа: ${paymentDetailsRes.data.ResponseMessage}&orderID=${orderID}`
+      );
+    }
+
+    // Перенаправление на страницу Tilda "Спасибо"
+    const successUrl = `${process.env.TILDA_SUCCESS_URL}?orderID=${orderID}&status=${PaymentState}&amount=${Amount}&card=${CardNumber}&email=${ClientEmail || opaque}`;
+    res.redirect(successUrl);
+  } catch (err) {
+    console.error('❌ Ошибка проверки платежа:', err.message);
+    res.redirect(
+      `${process.env.TILDA_FAIL_URL}?error=Ошибка сервера при проверке платежа&orderID=${orderID}`
+    );
   }
 });
 
