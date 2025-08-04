@@ -2,10 +2,10 @@ app = "ameria-vpos"
 primary_region = "otp"
 
 [env]
-  PORT = "3000"
+  PORT = "8080"
 
 [[services]]
-  internal_port = 3000
+  internal_port = 8080
   protocol = "tcp"
 
   [[services.ports]]
