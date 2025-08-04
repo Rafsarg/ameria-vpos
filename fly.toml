@@ -1,4 +1,4 @@
-аapp = "ameria-vpos"
+app = "ameria-vpos"
 primary_region = "otp"
 
 [env]
