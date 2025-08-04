@@ -1,39 +1,40 @@
 # syntax = docker/dockerfile:1
 
-# Adjust NODE_VERSION as desired
+# Используем Node.js 20.18.0 slim для уменьшения размера
 ARG NODE_VERSION=20.18.0
 FROM node:${NODE_VERSION}-slim AS base
 
 LABEL fly_launch_runtime="Node.js"
 
-# Node.js app lives here
+# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Set production environment
+# Устанавливаем production-режим
 ENV NODE_ENV="production"
 
-
-# Throw-away build stage to reduce size of final image
+# Этап сборки
 FROM base AS build
 
-# Install packages needed to build node modules
+# Устанавливаем необходимые пакеты
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+    apt-get install --no-install-recommends -y python3 build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install node modules
-COPY package.json ./
-RUN npm install
+# Копируем package.json и package-lock.json
+COPY package.json package-lock.json* ./
+RUN npm ci --production
 
-# Copy application code
+# Копируем код приложения
 COPY . .
 
-
-# Final stage for app image
+# Финальный этап
 FROM base
 
-# Copy built application
+# Копируем собранное приложение
 COPY --from=build /app /app
 
-# Start the server by default, this can be overwritten at runtime
+# Открываем порт
 EXPOSE 3000
-CMD [ "npm", "run", "start" ]
+
+# Запускаем приложение
+CMD ["node", "server.js"]
