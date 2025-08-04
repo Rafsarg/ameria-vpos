@@ -9,6 +9,10 @@ app.use(express.json());
 // Счетчик для тестового OrderID (диапазон 2350301–2350400)
 let testOrderId = 2350301;
 
+app.get('/', (req, res) => {
+  res.send('✅ Server is running. Use /create-payment endpoint.');
+});
+
 app.get('/create-payment', (req, res) => {
   res.send('✅ Webhook is alive');
 });
@@ -53,7 +57,6 @@ app.post('/create-payment', async (req, res) => {
 
     const { PaymentID, ResponseCode, ResponseMessage } = apiRes.data;
 
-    // Проверка успешного ответа (ResponseCode = 1 для InitPayment)
     if (ResponseCode !== 1) {
       console.error('❌ Ошибка AmeriaBank:', ResponseMessage);
       return res.status(500).json({
@@ -62,7 +65,6 @@ app.post('/create-payment', async (req, res) => {
       });
     }
 
-    // Формирование URL для перенаправления
     const paymentUrl = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${PaymentID}&lang=en`;
 
     return res.json({
@@ -78,22 +80,17 @@ app.post('/create-payment', async (req, res) => {
   }
 });
 
-// Обработка обратного вызова от AmeriaBank
 app.get('/payment-callback', async (req, res) => {
   const { orderID, responseCode, paymentID, opaque } = req.query;
   console.log('📥 Обратный вызов от AmeriaBank:', req.query);
 
-  // Используем переменные окружения или временные URL
   const TILDA_SUCCESS_URL = process.env.TILDA_SUCCESS_URL || 'https://your-tilda-site.com/thank-you';
   const TILDA_FAIL_URL = process.env.TILDA_FAIL_URL || 'https://your-tilda-site.com/error';
 
   if (responseCode !== '00') {
-    return res.redirect(
-      `${TILDA_FAIL_URL}?error=Платеж не выполнен&orderID=${orderID}`
-    );
+    return res.redirect(`${TILDA_FAIL_URL}?error=Платеж не выполнен&orderID=${orderID}`);
   }
 
-  // Проверка статуса платежа через GetPaymentDetails
   try {
     const paymentDetailsRes = await axios.post(
       'https://servicestest.ameriabank.am/VPOS/api/VPOS/GetPaymentDetails',
@@ -113,18 +110,15 @@ app.get('/payment-callback', async (req, res) => {
       );
     }
 
-    // Перенаправление на страницу Tilda "Спасибо"
     const successUrl = `${TILDA_SUCCESS_URL}?orderID=${orderID}&status=${PaymentState}&amount=${Amount}&card=${CardNumber}&email=${ClientEmail || opaque}`;
     res.redirect(successUrl);
   } catch (err) {
     console.error('❌ Ошибка проверки платежа:', err.message);
-    return res.redirect(
-      `${TILDA_FAIL_URL}?error=Ошибка сервера при проверке платежа&orderID=${orderID}`
-    );
+    return res.redirect(`${TILDA_FAIL_URL}?error=Ошибка сервера при проверке платежа&orderID=${orderID}`);
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
