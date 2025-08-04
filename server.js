@@ -3,10 +3,9 @@ const axios = require('axios');
 require('dotenv').config();
 
 const app = express();
-app.use(cors({
-  origin: 'https://purepilates.am', // или ваш домен на Тильде
-  credentials: true
-}));
+const cors = require('cors');
+app.use(cors()); // Разрешить ВСЕ источники
+
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
