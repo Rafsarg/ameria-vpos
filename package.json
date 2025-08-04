@@ -1,6 +1,7 @@
 {
   "name": "ameria-vpos",
   "version": "1.0.0",
+  "description": "AmeriaBank vPOS integration with Tilda",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -9,5 +10,7 @@
     "axios": "^1.6.8",
     "dotenv": "^16.3.1",
     "express": "^4.18.2"
-  }
+  },
+  "author": "Rafsarg",
+  "license": "MIT"
 }
