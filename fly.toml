@@ -1,18 +1,8 @@
-app = "ameria-vpos"
+аapp = "ameria-vpos"
 primary_region = "otp"
-
-[build]
-  builder = "paketobuildpacks/builder:base"
-  buildpacks = ["gcr.io/paketo-buildpacks/nodejs"]
 
 [env]
   PORT = "3000"
-  AMERIA_CLIENT_ID = "your_client_id"
-  AMERIA_USERNAME = "your_username"
-  AMERIA_PASSWORD = "your_password"
-  RETURN_URL = "https://ameria-vpos.fly.dev/payment-callback"
-  TILDA_SUCCESS_URL = "https://your-tilda-site.com/thank-you"
-  TILDA_FAIL_URL = "https://your-tilda-site.com/error"
 
 [[services]]
   internal_port = 3000
@@ -35,4 +25,3 @@ primary_region = "otp"
   memory = "1gb"
   cpu_kind = "shared"
   cpus = 1
-  memory_mb = 1024
