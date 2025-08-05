@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Перенаправление...</title>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const redirectUrl = params.get('redirect');
+    if (redirectUrl) {
+      window.location.href = redirectUrl;
+    } else {
+      document.body.innerHTML = 'Ошибка: redirect не указан.';
+    }
+  </script>
+</head>
+<body>
+  Перенаправляем...
+</body>
+</html>
