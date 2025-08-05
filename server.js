@@ -1,63 +1,58 @@
+// server.js
 const express = require('express');
 const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+app.use(bodyParser.json());
 
-// Отдаём статические файлы из папки public (redirect.html и т.д.)
-app.use(express.static('public'));
-
-// Обработчик POST-запроса для создания платежа
 app.post('/payment', async (req, res) => {
   const { name, email, amount } = req.body;
 
-  if (!name || !email || !amount) {
-    return res.status(400).json({ error: true, message: 'Missing required fields' });
-  }
+  const orderID = uuidv4(); // ✅ уникальный ID на каждый платёж
+
+  const paymentData = {
+    Username: process.env.AMERIA_USERNAME,
+    Password: process.env.AMERIA_PASSWORD,
+    ClientID: process.env.AMERIA_CLIENT_ID,
+    OrderID: orderID,
+    Amount: parseFloat(amount),
+    BackURL: 'https://ameria-vpos.fly.dev/payment-callback', // сюда вернёт после оплаты
+    Opaque: email,
+    Description: 'Оплата через сайт',
+    Currency: '051',
+    Language: 'en',
+  };
 
   try {
-    const response = await axios.post(
-      process.env.AMERIA_API_URL, // Например: https://servicestest.ameriabank.am/VPOS/api/VPOS/InitPayment
-      {
-        ClientID: process.env.AMERIA_CLIENT_ID,
-        Username: process.env.AMERIA_USERNAME,
-        Password: process.env.AMERIA_PASSWORD,
-        Description: `Оплата через сайт от ${name}`,
-        OrderID: Date.now().toString(),
-        Amount: Number(amount),
-        BackURL: process.env.RETURN_URL,
-        Opaque: email || '',
-        Language: 'en',
-        Currency: '051', // AMD
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
+    const { data } = await axios.post(`${process.env.AMERIA_API_URL}/VPOS/InitPayment`, paymentData, {
+      headers: { 'Content-Type': 'application/json' },
+    });
 
-    console.log('Ответ AmeriaBank:', response.data);
+    console.log('Ответ AmeriaBank:', data);
 
-    const paymentID = response.data.PaymentID;
-    if (!paymentID) {
-      return res.status(500).json({ error: true, message: 'Не удалось получить PaymentID' });
+    if (data.ResponseCode === 1 && data.PaymentID) {
+      const redirectUrl = `${process.env.AMERIA_API_URL}/VPOS/Payments/${data.PaymentID}`;
+      res.json({ redirectUrl });
+    } else {
+      res.status(400).json({ message: data.ResponseMessage || 'Ошибка при инициализации оплаты' });
     }
-
-    const paymentURL = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${paymentID}&lang=en`;
-    const redirectPage = `https://ameria-vpos.fly.dev/redirect.html?redirect=${encodeURIComponent(paymentURL)}`;
-
-    return res.json({ redirectUrl: redirectPage });
-  } catch (error) {
-    console.error('Ошибка при инициализации платежа:', error?.response?.data || error.message);
-    return res.status(500).json({ error: true, message: 'Ошибка при создании платежа' });
+  } catch (err) {
+    console.error('Ошибка при запросе к AmeriaBank:', err.message);
+    res.status(500).json({ message: 'Ошибка при соединении с AmeriaBank' });
   }
 });
 
+app.get('/payment-callback', (req, res) => {
+  console.log('✅ Callback от AmeriaBank:', req.query);
+  res.send(`<h1>Спасибо за оплату</h1><p>Платёж ${req.query.paymentID || ''} завершён.</p>`);
+});
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Сервер запущен на порту ${PORT}`);
 });
