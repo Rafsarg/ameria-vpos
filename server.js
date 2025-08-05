@@ -72,7 +72,8 @@ app.post('/create-payment', async (req, res) => {
     const paymentUrl = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${PaymentID}&lang=en`;
 
     // Возвращаем JSON с URL оплаты для клиента, чтобы фронтенд мог сделать редирект
-    return res.json({ redirectUrl: paymentUrl });
+        // Немедленно перенаправляем пользователя на страницу оплаты
+    return res.redirect(paymentUrl);
   } catch (err) {
     console.error('❌ Ошибка сервера:', err.message);
     return res.status(500).json({
