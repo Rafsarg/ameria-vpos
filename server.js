@@ -23,7 +23,7 @@ app.post('/payment', async (req, res) => {
 
   try {
     const response = await axios.post(
-      `${process.env.AMERIA_API_URL}/vpservlet`,
+      process.env.AMERIA_API_URL, // Например: https://servicestest.ameriabank.am/VPOS/api/VPOS/InitPayment
       {
         ClientID: process.env.AMERIA_CLIENT_ID,
         Username: process.env.AMERIA_USERNAME,
@@ -41,10 +41,17 @@ app.post('/payment', async (req, res) => {
       }
     );
 
-    const paymentURL = response.data.URL;
+    console.log('Ответ AmeriaBank:', response.data);
+
+    // Поддерживаем несколько вариантов названия поля с URL оплаты
+    const paymentURL = response.data.PaymentURL || response.data.URL || response.data.RedirectURL;
+
+    if (!paymentURL) {
+      return res.status(500).json({ error: true, message: 'Не удалось получить ссылку на оплату' });
+    }
+
     const redirectPage = `https://ameria-vpos.fly.dev/redirect.html?redirect=${encodeURIComponent(paymentURL)}`;
 
-    // Возвращаем JSON с ссылкой для редиректа
     return res.json({ redirectUrl: redirectPage });
   } catch (error) {
     console.error('Ошибка при инициализации платежа:', error?.response?.data || error.message);
