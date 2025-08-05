@@ -10,15 +10,15 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// Serve static files (redirect.html, etc.)
+// Отдаём статические файлы из папки public (redirect.html и т.д.)
 app.use(express.static('public'));
 
-// Маршрут для обработки формы
+// Обработчик POST-запроса для создания платежа
 app.post('/payment', async (req, res) => {
   const { name, email, amount } = req.body;
 
   if (!name || !email || !amount) {
-    return res.status(400).send('Missing required fields');
+    return res.status(400).json({ error: true, message: 'Missing required fields' });
   }
 
   try {
@@ -28,27 +28,27 @@ app.post('/payment', async (req, res) => {
         ClientID: process.env.AMERIA_CLIENT_ID,
         Username: process.env.AMERIA_USERNAME,
         Password: process.env.AMERIA_PASSWORD,
-        Description: 'Оплата через сайт',
+        Description: `Оплата через сайт от ${name}`,
         OrderID: Date.now().toString(),
         Amount: Number(amount),
         BackURL: process.env.RETURN_URL,
-        Opaque: '',
+        Opaque: email || '',
         Language: 'en',
-        Currency: '051', // Armenian Dram
+        Currency: '051', // AMD
       },
       {
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       }
     );
 
     const paymentURL = response.data.URL;
     const redirectPage = `https://ameria-vpos.fly.dev/redirect.html?redirect=${encodeURIComponent(paymentURL)}`;
-    return res.redirect(redirectPage);
+
+    // Возвращаем JSON с ссылкой для редиректа
+    return res.json({ redirectUrl: redirectPage });
   } catch (error) {
     console.error('Ошибка при инициализации платежа:', error?.response?.data || error.message);
-    return res.status(500).send('Ошибка при создании платежа');
+    return res.status(500).json({ error: true, message: 'Ошибка при создании платежа' });
   }
 });
 
