@@ -5,38 +5,27 @@ require('dotenv').config();
 const app = express();
 const cors = require('cors');
 
-app.use(cors()); // Разрешить все источники
-app.use(express.urlencoded({ extended: true }));
+app.use(cors());
+app.use(express.urlencoded({ extended: true })); // для form-urlencoded
 app.use(express.json());
 
-// Счётчик для тестовых OrderID (диапазон 2350301–2350400)
+// Счётчик OrderID (2350301–2350400)
 let testOrderId = 2350301;
 
 app.get('/', (req, res) => {
   res.send('✅ Server is running. Use POST /create-payment.');
 });
 
-app.get('/create-payment', (req, res) => {
-  res.send('✅ Webhook is alive. Use POST.');
-});
-
 app.post('/create-payment', async (req, res) => {
-  console.log('📥 Получены данные от формы:', req.body);
+  console.log('📥 Получены данные:', req.body);
   const { name, email, amount } = req.body;
 
-  // Проверка суммы для тестов
   if (parseInt(amount) !== 10) {
-    return res.status(400).json({
-      error: true,
-      message: 'В тестовом режиме разрешена только сумма 10 AMD',
-    });
+    return res.status(400).send('В тестовом режиме сумма должна быть 10 AMD');
   }
 
-  // Генерация уникального OrderID
   const orderId = testOrderId++;
-  if (testOrderId > 2350400) {
-    testOrderId = 2350301; // Сброс счётчика
-  }
+  if (testOrderId > 2350400) testOrderId = 2350301;
 
   const payload = {
     ClientID: process.env.AMERIA_CLIENT_ID,
@@ -44,9 +33,9 @@ app.post('/create-payment', async (req, res) => {
     Password: process.env.AMERIA_PASSWORD,
     Amount: parseFloat(amount),
     OrderID: orderId,
-    BackURL: process.env.RETURN_URL,
+    BackURL: process.env.RETURN_URL, // URL обратного вызова после оплаты
     Description: `Оплата билета от ${name}`,
-    Currency: '051', // AMD
+    Currency: '051',
     Timeout: 1200,
     Opaque: email || '',
   };
@@ -61,29 +50,23 @@ app.post('/create-payment', async (req, res) => {
     const { PaymentID, ResponseCode, ResponseMessage } = apiRes.data;
 
     if (ResponseCode !== 1) {
-      console.error('❌ Ошибка от AmeriaBank:', ResponseMessage);
-      return res.status(500).json({
-        error: true,
-        message: `Ошибка от AmeriaBank: ${ResponseMessage} (Код: ${ResponseCode})`,
-      });
+      console.error('❌ Ошибка AmeriaBank:', ResponseMessage);
+      return res.status(500).send(`Ошибка AmeriaBank: ${ResponseMessage} (Код: ${ResponseCode})`);
     }
 
     const paymentUrl = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${PaymentID}&lang=en`;
 
-    // Возвращаем URL для редиректа
-    return res.json({ redirectUrl: paymentUrl });
+    // Сразу редиректим клиента на оплату
+    return res.redirect(paymentUrl);
   } catch (err) {
     console.error('❌ Ошибка сервера:', err.message);
-    return res.status(500).json({
-      error: true,
-      message: `Ошибка при создании платежа: ${err.message}`,
-    });
+    return res.status(500).send(`Ошибка сервера: ${err.message}`);
   }
 });
 
 app.get('/payment-callback', async (req, res) => {
   const { orderID, responseCode, paymentID, opaque } = req.query;
-  console.log('📥 Callback от AmeriaBank:', req.query);
+  console.log('📥 Callback:', req.query);
 
   const TILDA_SUCCESS_URL = process.env.TILDA_SUCCESS_URL || 'https://your-tilda-site.com/thank-you';
   const TILDA_FAIL_URL = process.env.TILDA_FAIL_URL || 'https://your-tilda-site.com/error';
@@ -107,20 +90,11 @@ app.get('/payment-callback', async (req, res) => {
 
     if (ResponseCode !== '00') {
       return res.redirect(
-        `${TILDA_FAIL_URL}?error=Ошибка проверки платежа: ${paymentDetailsRes.data.ResponseMessage}&orderID=${orderID}`
+        `${TILDA_FAIL_URL}?error=Ошибка проверки платежа&orderID=${orderID}`
       );
     }
 
-    // Успешный редирект на Tilda
     const successUrl = `${TILDA_SUCCESS_URL}?orderID=${orderID}&status=${PaymentState}&amount=${Amount}&card=${CardNumber}&email=${ClientEmail || opaque}`;
     res.redirect(successUrl);
   } catch (err) {
-    console.error('❌ Ошибка при проверке платежа:', err.message);
-    return res.redirect(`${TILDA_FAIL_URL}?error=Ошибка сервера при проверке платежа&orderID=${orderID}`);
-  }
-});
-
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+    console.error('❌ Ошибка п
