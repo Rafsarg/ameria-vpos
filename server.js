@@ -43,13 +43,12 @@ app.post('/payment', async (req, res) => {
 
     console.log('Ответ AmeriaBank:', response.data);
 
-    // Поддерживаем несколько вариантов названия поля с URL оплаты
-    const paymentURL = response.data.PaymentURL || response.data.URL || response.data.RedirectURL;
-
-    if (!paymentURL) {
-      return res.status(500).json({ error: true, message: 'Не удалось получить ссылку на оплату' });
+    const paymentID = response.data.PaymentID;
+    if (!paymentID) {
+      return res.status(500).json({ error: true, message: 'Не удалось получить PaymentID' });
     }
 
+    const paymentURL = `https://servicestest.ameriabank.am/VPOS/Payments/Pay?id=${paymentID}&lang=en`;
     const redirectPage = `https://ameria-vpos.fly.dev/redirect.html?redirect=${encodeURIComponent(paymentURL)}`;
 
     return res.json({ redirectUrl: redirectPage });
